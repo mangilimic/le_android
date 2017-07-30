@@ -188,6 +188,33 @@ public class Utils {
         return "Host=" + hostName;
     }
 
+    public static String getFormattedLogLevel(boolean toJSON, int priority) {
+        String level = "UNKNOWN";
+
+        switch (priority) {
+            case Log.DEBUG:
+                level = "DEBUG";
+                break;
+            case Log.ERROR:
+                level = "ERROR";
+                break;
+            case Log.INFO:
+                level = "INFO";
+                break;
+            case Log.VERBOSE:
+                level = "VERBOSE";
+                break;
+            case Log.WARN:
+                level = "WARN";
+                break;
+        }
+
+        if (toJSON) {
+            return "\"Level\": \"" + level + "\"";
+        }
+        return "Level=" + level;
+    }
+
     /**
      * Via http://stackoverflow.com/a/10174938
      */
@@ -213,15 +240,17 @@ public class Utils {
      * Host=SOMEHOST Timestamp=12345 DeviceID=DEV_ID MESSAGE
      *
      * @param message       Message to be sent to Logentries
+     * @param priority      Log-level (as in android.utils.Log class. E.g.: android.utils.Log.DEBUG)
      * @param logHostName   - if set to true - "Host"=HOSTNAME parameter is appended to the message.
      * @param isUsingHttp   will be using http
      * @param printTraceId  - if set to true will print the "TraceID"
      * @param printDeviceId if set to true will print the "DeviceID"
      * @param deviceId      The device ID
+     * @param printLogLevel if set to true will print the loglevel
      * @return
      */
-    public static String formatMessage(String message, boolean logHostName, boolean isUsingHttp, boolean printTraceId,
-                                       boolean printDeviceId, String deviceId) {
+    public static String formatMessage(String message, int priority, boolean logHostName, boolean isUsingHttp, boolean printTraceId,
+                                       boolean printDeviceId, String deviceId, boolean printLogLevel) {
         StringBuilder sb = new StringBuilder();
 
         if (isUsingHttp) {
@@ -240,7 +269,12 @@ public class Utils {
         }
 
         if (printDeviceId) {
-            sb.append(getFormattedDeviceId(isUsingHttp, deviceId)).append(" ");
+            sb.append(Utils.getFormattedDeviceId(isUsingHttp, deviceId)).append(" ");
+            sb.append(isUsingHttp ? ", " : " ");
+        }
+
+        if (printLogLevel) {
+            sb.append(Utils.getFormattedLogLevel(isUsingHttp, priority)).append(" ");
             sb.append(isUsingHttp ? ", " : " ");
         }
 

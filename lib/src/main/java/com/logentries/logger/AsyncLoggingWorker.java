@@ -14,10 +14,9 @@ import java.util.concurrent.TimeUnit;
 
 public class AsyncLoggingWorker {
 
-	/*
+    /*
      * Constants
-	 */
-
+     */
     private static final String TAG = "LogentriesAndroidLogger";
 
     private static final int RECONNECT_WAIT = 100; // milliseconds.
@@ -62,7 +61,7 @@ public class AsyncLoggingWorker {
     /**
      * Message queue.
      */
-    private final ArrayBlockingQueue<String> queue;
+    private final ArrayBlockingQueue<AndroidLogger.LogItem> queue;
 
     /**
      * Logs queue storage
@@ -71,15 +70,17 @@ public class AsyncLoggingWorker {
 
     private final String deviceId;
 
-    public AsyncLoggingWorker(Context context, boolean useSsl, boolean useHttpPost, boolean printTraceId, boolean printDeviceId, String deviceId, boolean useDataHub, String logToken,
-                              String dataHubAddress, int dataHubPort, boolean logHostName) throws IOException {
+    public AsyncLoggingWorker(Context context, boolean useSsl, boolean useHttpPost, boolean printTraceId,
+                              boolean printDeviceId, String deviceId, boolean printPriority, boolean useDataHub,
+                              String logToken, String dataHubAddress, int dataHubPort, boolean logHostName)
+            throws IOException {
         if (!checkTokenFormat(logToken)) {
             throw new IllegalArgumentException(INVALID_TOKEN);
         }
 
         queue = new ArrayBlockingQueue<>(QUEUE_SIZE);
         localStorage = new LogStorage(context);
-        appender = new SocketAppender(useHttpPost, useSsl, useDataHub, dataHubAddress, dataHubPort, logToken, logHostName, this.sendRawLogMessage, printTraceId, printDeviceId);
+        appender = new SocketAppender(useHttpPost, useSsl, useDataHub, dataHubAddress, dataHubPort, logToken, logHostName, this.sendRawLogMessage, printTraceId, printDeviceId, printPriority);
         appender.start();
         started = true;
         this.deviceId = deviceId;
@@ -93,22 +94,21 @@ public class AsyncLoggingWorker {
         return sendRawLogMessage;
     }
 
-    public void addLineToQueue(String line) {
+    public void addLineToQueue(int priorityLevel, String line) {
 
         // Check that we have all parameters set and socket appender running.
         if (!this.started) {
-
             appender.start();
             started = true;
         }
 
         if (line.length() > LOG_LENGTH_LIMIT) {
             for (String logChunk : Utils.splitStringToChunks(line, LOG_LENGTH_LIMIT)) {
-                tryOfferToQueue(logChunk);
+                tryOfferToQueue(priorityLevel, logChunk);
             }
 
         } else {
-            tryOfferToQueue(line);
+            tryOfferToQueue(priorityLevel, line);
         }
     }
 
@@ -148,8 +148,8 @@ public class AsyncLoggingWorker {
         return Utils.checkValidUUID(token);
     }
 
-    private void tryOfferToQueue(String line) throws RuntimeException {
-        if (!queue.offer(line)) {
+    private void tryOfferToQueue(int priority, String line) throws RuntimeException {
+        if (!queue.offer(new AndroidLogger.LogItem(priority, line))) {
             Log.e(TAG, "The queue is full - will try to drop the oldest message in it.");
             queue.poll();
             /*
@@ -164,7 +164,7 @@ public class AsyncLoggingWorker {
             rareness of the case with queue overflow.
              */
 
-            if (!queue.offer(line)) {
+            if (!queue.offer(new AndroidLogger.LogItem(priority, line))) {
                 throw new RuntimeException(QUEUE_OVERFLOW);
             }
         }
@@ -187,9 +187,10 @@ public class AsyncLoggingWorker {
         private boolean sendRawLogMessage = false;
         private boolean printTraceId = false;
         private boolean printDeviceId = false;
+        private boolean printPriority = false;
 
         public SocketAppender(boolean useHttpPost, boolean useSsl, boolean isUsingDataHub, String dataHubAddr, int dataHubPort,
-                              String token, boolean logHostName, boolean sendRawLogMessage, boolean printTraceId, boolean printDeviceId) {
+                              String token, boolean logHostName, boolean sendRawLogMessage, boolean printTraceId, boolean printDeviceId, boolean printPriority) {
             super("Logentries Socket appender");
 
             // Don't block shut down
@@ -204,6 +205,7 @@ public class AsyncLoggingWorker {
             this.logHostName = logHostName;
             this.printTraceId = printTraceId;
             this.printDeviceId = printDeviceId;
+            this.printPriority = printPriority;
             this.sendRawLogMessage = sendRawLogMessage;
         }
 
@@ -248,16 +250,15 @@ public class AsyncLoggingWorker {
         }
 
         private boolean tryUploadSavedLogs() {
-            Queue<String> logs = new ArrayDeque<String>();
+            Queue<AndroidLogger.LogItem> logs = new ArrayDeque<>();
 
             try {
-
                 logs = localStorage.getAllLogsFromStorage(false);
-                for (String msg = logs.peek(); msg != null; msg = logs.peek()) {
+                for (AndroidLogger.LogItem msg = logs.peek(); msg != null; msg = logs.peek()) {
                     if (sendRawLogMessage) {
-                        leClient.write(Utils.formatMessage(msg.replace("\n", LINE_SEP_REPLACER), logHostName, useHttpPost, printTraceId, printDeviceId, deviceId));
+                        leClient.write(Utils.formatMessage(msg.message.replace("\n", LINE_SEP_REPLACER), msg.priority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
                     } else {
-                        leClient.write(msg.replace("\n", LINE_SEP_REPLACER));
+                        leClient.write(msg.message.replace("\n", LINE_SEP_REPLACER));
                     }
                     logs.poll(); // Remove the message after successful sending.
                 }
@@ -277,7 +278,7 @@ public class AsyncLoggingWorker {
                 // Try to save back all messages, that haven't been sent yet.
                 try {
                     localStorage.reCreateStorageFile();
-                    for (String msg : logs) {
+                    for (AndroidLogger.LogItem msg : logs) {
                         localStorage.putLogToStorage(msg);
                     }
                 } catch (IOException ioEx2) {
@@ -296,11 +297,11 @@ public class AsyncLoggingWorker {
                 // Open connection
                 reopenConnection(MAX_RECONNECT_ATTEMPTS);
 
-                Queue<String> prevSavedLogs = localStorage.getAllLogsFromStorage(true);
+                Queue<AndroidLogger.LogItem> prevSavedLogs = localStorage.getAllLogsFromStorage(true);
 
                 int numFailures = 0;
                 boolean connectionIsBroken = false;
-                String message = null;
+                AndroidLogger.LogItem logItem = null;
 
                 // Send data in queue
                 while (true) {
@@ -312,12 +313,12 @@ public class AsyncLoggingWorker {
 
                         // Try to take data from the queue if there are no logs from
                         // the local storage left to send.
-                        message = queue.poll(MAX_QUEUE_POLL_TIME, TimeUnit.MILLISECONDS);
+                        logItem = queue.poll(MAX_QUEUE_POLL_TIME, TimeUnit.MILLISECONDS);
 
                     } else {
 
                         // Getting messages from the previous session one by one.
-                        message = prevSavedLogs.poll();
+                        logItem = prevSavedLogs.poll();
                     }
 
                     // Send data, reconnect if needed.
@@ -334,10 +335,10 @@ public class AsyncLoggingWorker {
                                 }
                             }
 
-                            if (message != null) {
-                                this.leClient.write(Utils.formatMessage(message.replace("\n", LINE_SEP_REPLACER),
-                                        logHostName, useHttpPost, printTraceId, printDeviceId, deviceId));
-                                message = null;
+                            if (logItem != null) {
+                                this.leClient.write(Utils.formatMessage(logItem.message.replace("\n", LINE_SEP_REPLACER),
+                                        logItem.priority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
+                                logItem = null;
                             }
 
                         } catch (IOException e) {
@@ -348,8 +349,8 @@ public class AsyncLoggingWorker {
                                 // server at all...
                                 try {
                                     // ... and put the current message to the local storage.
-                                    localStorage.putLogToStorage(message);
-                                    message = null;
+                                    localStorage.putLogToStorage(logItem);
+                                    logItem = null;
                                 } catch (IOException ex) {
                                     Log.e(TAG, "Cannot save the log message to the local storage! Error: " +
                                             ex.getMessage());
@@ -376,11 +377,11 @@ public class AsyncLoggingWorker {
 
                 // Save all existing logs to the local storage.
                 // There is nothing we can do else in this case.
-                String message = queue.poll();
+                AndroidLogger.LogItem logItem = queue.poll();
                 try {
-                    while (message != null) {
-                        localStorage.putLogToStorage(message);
-                        message = queue.poll();
+                    while (logItem != null) {
+                        localStorage.putLogToStorage(logItem);
+                        logItem = queue.poll();
                     }
                 } catch (IOException ex) {
                     Log.e(TAG, "Cannot save logs queue to the local storage - all log messages will be dropped! Error: " +
@@ -396,3 +397,4 @@ public class AsyncLoggingWorker {
         return deviceId;
     }
 }
+

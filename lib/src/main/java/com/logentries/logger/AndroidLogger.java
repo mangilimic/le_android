@@ -11,26 +11,26 @@ public class AndroidLogger {
 
     private final AsyncLoggingWorker loggingWorker;
 
-    private AndroidLogger(Context context, boolean useHttpPost, boolean useSsl, boolean printTraceId, boolean printDeviceId, String deviceId, boolean isUsingDataHub, String dataHubAddr, int dataHubPort,
+    private AndroidLogger(Context context, boolean useHttpPost, boolean useSsl, boolean printTraceId, boolean printDeviceId, String deviceId, boolean printPriority, boolean isUsingDataHub, String dataHubAddr, int dataHubPort,
                           String token, boolean logHostName) throws IOException {
-        loggingWorker = new AsyncLoggingWorker(context, useSsl, useHttpPost, printTraceId, printDeviceId, deviceId, isUsingDataHub, token, dataHubAddr, dataHubPort, logHostName);
+        loggingWorker = new AsyncLoggingWorker(context, useSsl, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority, isUsingDataHub, token, dataHubAddr, dataHubPort, logHostName);
     }
 
-    public static synchronized AndroidLogger createInstance(Context context, boolean useHttpPost, boolean useSsl, boolean printTraceId, boolean printDeviceId, String deviceId, boolean isUsingDataHub,
+    public static synchronized AndroidLogger createInstance(Context context, boolean useHttpPost, boolean useSsl, boolean printTraceId, boolean printDeviceId, String deviceId, boolean printPriority, boolean isUsingDataHub,
                                                             String dataHubAddr, int dataHubPort, String token, boolean logHostName)
             throws IOException {
         if (instance != null) {
             instance.loggingWorker.close();
         }
 
-        instance = new AndroidLogger(context, useHttpPost, useSsl, printTraceId, printDeviceId, deviceId, isUsingDataHub, dataHubAddr, dataHubPort, token, logHostName);
+        instance = new AndroidLogger(context, useHttpPost, useSsl, printTraceId, printDeviceId, deviceId, printPriority, isUsingDataHub, dataHubAddr, dataHubPort, token, logHostName);
         return instance;
     }
 
-    public static synchronized AndroidLogger createInstance(Context context, boolean useHttpPost, boolean useSsl, boolean printTraceId, boolean printDeviceId, boolean isUsingDataHub,
+    public static synchronized AndroidLogger createInstance(Context context, boolean useHttpPost, boolean useSsl, boolean printTraceId, boolean printDeviceId, boolean printPriority, boolean isUsingDataHub,
                                                             String dataHubAddr, int dataHubPort, String token, boolean logHostName)
             throws IOException {
-        return createInstance(context, useHttpPost, useSsl, printTraceId, printDeviceId, Utils.getDeviceId(context), isUsingDataHub, dataHubAddr, dataHubPort, token, logHostName);
+        return createInstance(context, useHttpPost, useSsl, printTraceId, printDeviceId, Utils.getDeviceId(context), printPriority, isUsingDataHub, dataHubAddr, dataHubPort, token, logHostName);
     }
 
     public static synchronized AndroidLogger getInstance() {
@@ -60,10 +60,29 @@ public class AndroidLogger {
     }
 
     public void log(String message) {
-        loggingWorker.addLineToQueue(message);
+        log(-1, message);
+    }
+
+    public void log(int priority, String message) {
+        loggingWorker.addLineToQueue(priority, message);
     }
 
     public String getDeviceId() {
         return loggingWorker.getDeviceId();
+    }
+
+    static class LogItem {
+
+        public final String message;
+        public final int priority;
+
+        public LogItem(int priority, String message) {
+            this.priority = priority;
+            this.message = message;
+        }
+
+        public LogItem(String priority, String message) throws NumberFormatException {
+            this(Integer.parseInt(priority), message);
+        }
     }
 }

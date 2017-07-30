@@ -12,24 +12,31 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class LogStorage {
 
     private static final String TAG = "LogentriesAndroidLogger";
     private static final String STORAGE_FILE_NAME = "LogentriesLogStorage.log";
     private static final long MAX_QUEUE_FILE_SIZE = 10 * 1024 * 1024; // 10 MBytes.
+    private static final String PRIORITY_SEPARATOR = ";";
 
     private Context context;
 
     private File storageFilePtr = null; // We keep the ptr permanently, because frequently accessing
     // the file for retrieving it's size.
 
+    private final Pattern pattern;
+
     public LogStorage(Context context) throws IOException {
         this.context = context;
+        this.pattern = Pattern.compile("([0-9]+)" + PRIORITY_SEPARATOR + "(.*)");
         storageFilePtr = create();
     }
 
-    public void putLogToStorage(String message) throws IOException, RuntimeException {
+    public void putLogToStorage(AndroidLogger.LogItem logItem) throws IOException, RuntimeException {
+        String message = logItem.priority + PRIORITY_SEPARATOR + logItem.message;
 
         // Fix line endings for ingesting the log to the local storage.
         if (!message.endsWith("\n")) {
@@ -57,8 +64,8 @@ public class LogStorage {
         }
     }
 
-    public Queue<String> getAllLogsFromStorage(boolean needToRemoveStorageFile) {
-        Queue<String> logs = new ArrayDeque<String>();
+    public Queue<AndroidLogger.LogItem> getAllLogsFromStorage(boolean needToRemoveStorageFile) {
+        Queue<AndroidLogger.LogItem> logs = new ArrayDeque<>();
         FileInputStream input = null;
 
         try {
@@ -68,7 +75,16 @@ public class LogStorage {
 
             String logLine = bufReader.readLine();
             while (logLine != null) {
-                logs.offer(logLine);
+                try {
+                    Matcher m = pattern.matcher(logLine);
+                    String priorityStr = m.group(1);
+                    String message = m.group(2);
+
+                    logs.offer(new AndroidLogger.LogItem(priorityStr, message));
+                } catch (NumberFormatException ex) {
+                    Log.e(TAG, "Unexpected number format exception", ex);
+                }
+
                 logLine = bufReader.readLine();
             }
 
