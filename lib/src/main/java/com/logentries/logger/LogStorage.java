@@ -20,7 +20,7 @@ public class LogStorage {
     private static final String TAG = "LogentriesAndroidLogger";
     private static final String STORAGE_FILE_NAME = "LogentriesLogStorage.log";
     private static final long MAX_QUEUE_FILE_SIZE = 10 * 1024 * 1024; // 10 MBytes.
-    private static final String PRIORITY_SEPARATOR = ";";
+    static final String PRIORITY_SEPARATOR = ";";
 
     private Context context;
 
@@ -31,12 +31,13 @@ public class LogStorage {
 
     public LogStorage(Context context) throws IOException {
         this.context = context;
-        this.pattern = Pattern.compile("([0-9]+)" + PRIORITY_SEPARATOR + "(.*)");
+        this.pattern = Pattern.compile("([0-9]+)" + PRIORITY_SEPARATOR + "([^;]*)" + PRIORITY_SEPARATOR + "(.*)");
         storageFilePtr = create();
     }
 
     public void putLogToStorage(AndroidLogger.LogItem logItem) throws IOException, RuntimeException {
-        String message = logItem.priority + PRIORITY_SEPARATOR + logItem.message;
+        String tag = logItem.tag == null ? "" : logItem.tag;
+        String message = logItem.priority + PRIORITY_SEPARATOR + tag + PRIORITY_SEPARATOR + logItem.message;
 
         // Fix line endings for ingesting the log to the local storage.
         if (!message.endsWith("\n")) {
@@ -78,9 +79,10 @@ public class LogStorage {
                 try {
                     Matcher m = pattern.matcher(logLine);
                     String priorityStr = m.group(1);
-                    String message = m.group(2);
+                    String tag = m.group(2);
+                    String message = m.group(3);
 
-                    logs.offer(new AndroidLogger.LogItem(priorityStr, message));
+                    logs.offer(new AndroidLogger.LogItem(priorityStr, tag, message));
                 } catch (NumberFormatException ex) {
                     Log.e(TAG, "Unexpected number format exception", ex);
                 }

@@ -177,6 +177,13 @@ public class Utils {
         return "TraceID=" + traceID;
     }
 
+    public static String getFormattedTag(boolean toJSON, String tag) {
+        if (toJSON) {
+            return "\"TAG\": \"" + tag + "\"";
+        }
+        return "TAG=" + tag;
+    }
+
     public static String getHostName() {
         return hostName;
     }
@@ -249,7 +256,7 @@ public class Utils {
      * @param printLogLevel if set to true will print the loglevel
      * @return
      */
-    public static String formatMessage(String message, int priority, boolean logHostName, boolean isUsingHttp, boolean printTraceId,
+    public static String formatMessage(String tag, String message, int priority, boolean logHostName, boolean isUsingHttp, boolean printTraceId,
                                        boolean printDeviceId, String deviceId, boolean printLogLevel) {
         StringBuilder sb = new StringBuilder();
 
@@ -277,6 +284,9 @@ public class Utils {
             sb.append(Utils.getFormattedLogLevel(isUsingHttp, priority)).append(" ");
             sb.append(isUsingHttp ? ", " : " ");
         }
+
+        sb.append(Utils.getFormattedTag(isUsingHttp, tag)).append(" ");
+        sb.append(isUsingHttp ? ", " : " ");
 
         long timestamp = System.currentTimeMillis(); // Current time in UTC in milliseconds.
         if (isUsingHttp) {

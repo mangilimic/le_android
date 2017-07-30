@@ -60,11 +60,11 @@ public class AndroidLogger {
     }
 
     public void log(String message) {
-        log(-1, message);
+        log(-1, null, message);
     }
 
-    public void log(int priority, String message) {
-        loggingWorker.addLineToQueue(priority, message);
+    public void log(int priority, String tag, String message) {
+        loggingWorker.addLineToQueue(priority, tag, message);
     }
 
     public String getDeviceId() {
@@ -73,16 +73,18 @@ public class AndroidLogger {
 
     static class LogItem {
 
-        public final String message;
         public final int priority;
+        public final String tag;
+        public final String message;
 
-        public LogItem(int priority, String message) {
+        public LogItem(int priority, String tag, String message) {
             this.priority = priority;
+            this.tag = tag;
             this.message = message;
         }
 
-        public LogItem(String priority, String message) throws NumberFormatException {
-            this(Integer.parseInt(priority), message);
+        public LogItem(String priority, String tag, String message) throws NumberFormatException {
+            this(Integer.parseInt(priority), tag, message);
         }
     }
 }

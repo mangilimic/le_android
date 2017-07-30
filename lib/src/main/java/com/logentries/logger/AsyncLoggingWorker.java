@@ -94,21 +94,24 @@ public class AsyncLoggingWorker {
         return sendRawLogMessage;
     }
 
-    public void addLineToQueue(int priorityLevel, String line) {
-
+    public void addLineToQueue(int priorityLevel, String tag, String line) {
         // Check that we have all parameters set and socket appender running.
         if (!this.started) {
             appender.start();
             started = true;
         }
 
+        if (tag != null) {
+            tag = tag.replace(LogStorage.PRIORITY_SEPARATOR, "");
+        }
+
         if (line.length() > LOG_LENGTH_LIMIT) {
             for (String logChunk : Utils.splitStringToChunks(line, LOG_LENGTH_LIMIT)) {
-                tryOfferToQueue(priorityLevel, logChunk);
+                tryOfferToQueue(priorityLevel, tag, logChunk);
             }
 
         } else {
-            tryOfferToQueue(priorityLevel, line);
+            tryOfferToQueue(priorityLevel, tag, line);
         }
     }
 
@@ -148,8 +151,8 @@ public class AsyncLoggingWorker {
         return Utils.checkValidUUID(token);
     }
 
-    private void tryOfferToQueue(int priority, String line) throws RuntimeException {
-        if (!queue.offer(new AndroidLogger.LogItem(priority, line))) {
+    private void tryOfferToQueue(int priority, String tag, String line) throws RuntimeException {
+        if (!queue.offer(new AndroidLogger.LogItem(priority, tag, line))) {
             Log.e(TAG, "The queue is full - will try to drop the oldest message in it.");
             queue.poll();
             /*
@@ -164,7 +167,7 @@ public class AsyncLoggingWorker {
             rareness of the case with queue overflow.
              */
 
-            if (!queue.offer(new AndroidLogger.LogItem(priority, line))) {
+            if (!queue.offer(new AndroidLogger.LogItem(priority, tag, line))) {
                 throw new RuntimeException(QUEUE_OVERFLOW);
             }
         }
@@ -189,8 +192,9 @@ public class AsyncLoggingWorker {
         private boolean printDeviceId = false;
         private boolean printPriority = false;
 
-        public SocketAppender(boolean useHttpPost, boolean useSsl, boolean isUsingDataHub, String dataHubAddr, int dataHubPort,
-                              String token, boolean logHostName, boolean sendRawLogMessage, boolean printTraceId, boolean printDeviceId, boolean printPriority) {
+        public SocketAppender(boolean useHttpPost, boolean useSsl, boolean isUsingDataHub, String dataHubAddr,
+                              int dataHubPort, String token, boolean logHostName, boolean sendRawLogMessage,
+                              boolean printTraceId, boolean printDeviceId, boolean printPriority) {
             super("Logentries Socket appender");
 
             // Don't block shut down
@@ -256,7 +260,7 @@ public class AsyncLoggingWorker {
                 logs = localStorage.getAllLogsFromStorage(false);
                 for (AndroidLogger.LogItem msg = logs.peek(); msg != null; msg = logs.peek()) {
                     if (sendRawLogMessage) {
-                        leClient.write(Utils.formatMessage(msg.message.replace("\n", LINE_SEP_REPLACER), msg.priority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
+                        leClient.write(Utils.formatMessage(msg.tag, msg.message.replace("\n", LINE_SEP_REPLACER), msg.priority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
                     } else {
                         leClient.write(msg.message.replace("\n", LINE_SEP_REPLACER));
                     }
@@ -336,7 +340,7 @@ public class AsyncLoggingWorker {
                             }
 
                             if (logItem != null) {
-                                this.leClient.write(Utils.formatMessage(logItem.message.replace("\n", LINE_SEP_REPLACER),
+                                this.leClient.write(Utils.formatMessage(logItem.tag, logItem.message.replace("\n", LINE_SEP_REPLACER),
                                         logItem.priority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
                                 logItem = null;
                             }
