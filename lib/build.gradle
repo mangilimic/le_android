@@ -1,22 +1,24 @@
 apply plugin: 'com.android.library'
 apply plugin: 'com.github.dcendents.android-maven'
+apply plugin: 'maven'
+
+group = 'com.github.LogentriesCommunity'
 
 android {
 
     // apparently javadoc fails using this:
     // useLibrary 'org.apache.http.legacy'
 
-    compileSdkVersion 24
-    buildToolsVersion "24.0.1"
+    compileSdkVersion 26
+    buildToolsVersion "26.0.1"
 
     defaultConfig {
         minSdkVersion 15
-        targetSdkVersion 24
+        targetSdkVersion 26
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-
     }
     buildTypes {
         release {
@@ -59,4 +61,16 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
 artifacts {
     archives sourcesJar
     archives javadocJar
+}
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            repository(url: 'file://' + new File(System.getProperty('user.home'), '.m2/repository').absolutePath)
+
+            pom.version = "logentries-android-mangili-4.4.1"
+            pom.artifactId = "le_android"
+            pom.groupId = "com.github.LogentriesCommunity"
+        }
+    }
 }

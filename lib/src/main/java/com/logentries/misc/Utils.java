@@ -1,11 +1,14 @@
 package com.logentries.misc;
 
+import android.content.Context;
 import android.os.Build;
 import android.util.Log;
 
+import java.io.*;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.Buffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -27,6 +30,57 @@ public class Utils {
 
     private static String traceID = "";
     private static String hostName = "";
+
+    private static String deviceId = null;
+
+    private static final String le_device_filename = "LogentriesLogStorage.dat";
+
+    public static synchronized String getDeviceId(Context c) {
+        if (deviceId == null)
+            readOrGenerateDeviceId(c);
+        return deviceId;
+    }
+
+    private static synchronized void readOrGenerateDeviceId(Context c) {
+        // Attempt to read deviceId
+        BufferedReader br = null;
+        try {
+            br = new BufferedReader(new InputStreamReader(c.openFileInput(le_device_filename)));
+            deviceId = br.readLine();
+            Log.d(TAG, "Device id retrieved from file: " + deviceId);
+
+            // Device id read, terminate
+            return;
+        } catch (IOException ex) {
+            Log.d(TAG, "Exception while reading the device id from file", ex);
+        } finally {
+            try {
+                if (br != null)
+                    br.close();
+            } catch (IOException ex) {
+                Log.e(TAG, "Exception while closing the device id file open in read mode", ex);
+            }
+        }
+
+        // Generate and store device ID
+        BufferedWriter bw = null;
+        try {
+            deviceId = UUID.randomUUID().toString();
+            bw = new BufferedWriter(new OutputStreamWriter(c.openFileOutput(le_device_filename, Context.MODE_PRIVATE)));
+            bw.write(deviceId);
+
+            Log.d(TAG, "Generated new deviceID: " + deviceId);
+        } catch (IOException ex) {
+            Log.e(TAG, "Exception while writing the device id to file", ex);
+        } finally {
+            try {
+                if (bw != null)
+                    bw.close();
+            } catch (IOException ex) {
+                Log.e(TAG, "Exception while closing the device id file open in write mode", ex);
+            }
+        }
+    }
 
     // Requires at least API level 9 (v. >= 2.3).
     static {
@@ -67,7 +121,6 @@ public class Utils {
     }
 
     private static String computeTraceID() throws NoSuchAlgorithmException {
-
         String fingerprint = getProp("ro.build.fingerprint");
         String displayId = getProp("ro.build.display.id");
         String hardware = getProp("ro.hardware");
@@ -110,11 +163,11 @@ public class Utils {
     }
 
 
-    private static String getFormattedDeviceId(boolean toJSON) {
+    private static String getFormattedDeviceId(boolean toJSON, String deviceId) {
         if (toJSON) {
-            return "\"DeviceId\": \"" + Build.SERIAL + "\"";
+            return "\"DeviceId\": \"" + deviceId + "\"";
         }
-        return "DeviceId=" + Build.SERIAL;
+        return "DeviceId=" + deviceId;
     }
 
     public static String getFormattedTraceID(boolean toJSON) {
@@ -136,8 +189,8 @@ public class Utils {
     }
 
     /**
-    *  Via http://stackoverflow.com/a/10174938
-    */
+     * Via http://stackoverflow.com/a/10174938
+     */
     public static boolean isJSONValid(String message) {
         try {
             new JSONObject(message);
@@ -159,12 +212,16 @@ public class Utils {
      * If isUsingHttp == false the output will be like this:
      * Host=SOMEHOST Timestamp=12345 DeviceID=DEV_ID MESSAGE
      *
-     * @param message     Message to be sent to Logentries
-     * @param logHostName - if set to true - "Host"=HOSTNAME parameter is appended to the message.
-     * @param isUsingHttp will be using http
+     * @param message       Message to be sent to Logentries
+     * @param logHostName   - if set to true - "Host"=HOSTNAME parameter is appended to the message.
+     * @param isUsingHttp   will be using http
+     * @param printTraceId  - if set to true will print the "TraceID"
+     * @param printDeviceId if set to true will print the "DeviceID"
+     * @param deviceId      The device ID
      * @return
      */
-    public static String formatMessage(String message, boolean logHostName, boolean isUsingHttp) {
+    public static String formatMessage(String message, boolean logHostName, boolean isUsingHttp, boolean printTraceId,
+                                       boolean printDeviceId, String deviceId) {
         StringBuilder sb = new StringBuilder();
 
         if (isUsingHttp) {
@@ -177,12 +234,15 @@ public class Utils {
             sb.append(isUsingHttp ? ", " : " ");
         }
 
-        sb.append(Utils.getFormattedTraceID(isUsingHttp)).append(" ");
-        sb.append(isUsingHttp ? ", " : " ");
+        if (printTraceId) {
+            sb.append(Utils.getFormattedTraceID(isUsingHttp)).append(" ");
+            sb.append(isUsingHttp ? ", " : " ");
+        }
 
-
-        sb.append(Utils.getFormattedDeviceId(isUsingHttp)).append(" ");
-        sb.append(isUsingHttp ? ", " : " ");
+        if (printDeviceId) {
+            sb.append(getFormattedDeviceId(isUsingHttp, deviceId)).append(" ");
+            sb.append(isUsingHttp ? ", " : " ");
+        }
 
         long timestamp = System.currentTimeMillis(); // Current time in UTC in milliseconds.
         if (isUsingHttp) {
@@ -220,10 +280,6 @@ public class Utils {
             }
         }
         return false;
-    }
-
-    public static boolean checkIfHostNameValid(String hostName) {
-        return !HOSTNAME_REGEX.matcher(hostName).find();
     }
 
     public static String[] splitStringToChunks(String source, int chunkLength) {

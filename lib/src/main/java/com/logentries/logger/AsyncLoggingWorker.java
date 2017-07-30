@@ -57,50 +57,39 @@ public class AsyncLoggingWorker {
     /**
      * Asynchronous socket appender.
      */
-    private SocketAppender appender;
+    private final SocketAppender appender;
 
     /**
      * Message queue.
      */
-    private ArrayBlockingQueue<String> queue;
+    private final ArrayBlockingQueue<String> queue;
 
     /**
      * Logs queue storage
      */
-    private LogStorage localStorage;
+    private final LogStorage localStorage;
 
-    public AsyncLoggingWorker(Context context, boolean useSsl, boolean useHttpPost, boolean useDataHub, String logToken,
+    private final String deviceId;
+
+    public AsyncLoggingWorker(Context context, boolean useSsl, boolean useHttpPost, boolean printTraceId, boolean printDeviceId, String deviceId, boolean useDataHub, String logToken,
                               String dataHubAddress, int dataHubPort, boolean logHostName) throws IOException {
-
         if (!checkTokenFormat(logToken)) {
             throw new IllegalArgumentException(INVALID_TOKEN);
         }
 
-        queue = new ArrayBlockingQueue<String>(QUEUE_SIZE);
+        queue = new ArrayBlockingQueue<>(QUEUE_SIZE);
         localStorage = new LogStorage(context);
-        appender = new SocketAppender(useHttpPost, useSsl, useDataHub, dataHubAddress, dataHubPort, logToken, logHostName, this.sendRawLogMessage);
+        appender = new SocketAppender(useHttpPost, useSsl, useDataHub, dataHubAddress, dataHubPort, logToken, logHostName, this.sendRawLogMessage, printTraceId, printDeviceId);
         appender.start();
         started = true;
+        this.deviceId = deviceId;
     }
 
-    public AsyncLoggingWorker(Context context, boolean useSsl, boolean useHttpPost, String logToken) throws IOException {
-        this(context, useSsl, useHttpPost, false, logToken, null, 0, true);
-    }
-
-    public AsyncLoggingWorker(Context context, boolean useSsl, String logToken) throws IOException {
-        this(context, useSsl, false, false, logToken, null, 0, true);
-    }
-
-    public AsyncLoggingWorker(Context context, boolean useSsl, String logToken, String dataHubAddr, int dataHubPort)
-            throws IOException {
-        this(context, useSsl, false, true, logToken, dataHubAddr, dataHubPort, true);
-    }
-
-    public void setSendRawLogMessage(boolean sendRawLogMessage){
+    public void setSendRawLogMessage(boolean sendRawLogMessage) {
         this.sendRawLogMessage = sendRawLogMessage;
     }
 
-    public boolean getSendRawLogMessage(){
+    public boolean getSendRawLogMessage() {
         return sendRawLogMessage;
     }
 
@@ -196,9 +185,11 @@ public class AsyncLoggingWorker {
         private String token;
         private boolean logHostName = true;
         private boolean sendRawLogMessage = false;
+        private boolean printTraceId = false;
+        private boolean printDeviceId = false;
 
         public SocketAppender(boolean useHttpPost, boolean useSsl, boolean isUsingDataHub, String dataHubAddr, int dataHubPort,
-                              String token, boolean logHostName, boolean sendRawLogMessage) {
+                              String token, boolean logHostName, boolean sendRawLogMessage, boolean printTraceId, boolean printDeviceId) {
             super("Logentries Socket appender");
 
             // Don't block shut down
@@ -211,6 +202,8 @@ public class AsyncLoggingWorker {
             this.dataHubPort = dataHubPort;
             this.token = token;
             this.logHostName = logHostName;
+            this.printTraceId = printTraceId;
+            this.printDeviceId = printDeviceId;
             this.sendRawLogMessage = sendRawLogMessage;
         }
 
@@ -261,9 +254,9 @@ public class AsyncLoggingWorker {
 
                 logs = localStorage.getAllLogsFromStorage(false);
                 for (String msg = logs.peek(); msg != null; msg = logs.peek()) {
-                    if(sendRawLogMessage){
-                        leClient.write(Utils.formatMessage(msg.replace("\n", LINE_SEP_REPLACER),logHostName, useHttpPost));
-                    }else{
+                    if (sendRawLogMessage) {
+                        leClient.write(Utils.formatMessage(msg.replace("\n", LINE_SEP_REPLACER), logHostName, useHttpPost, printTraceId, printDeviceId, deviceId));
+                    } else {
                         leClient.write(msg.replace("\n", LINE_SEP_REPLACER));
                     }
                     logs.poll(); // Remove the message after successful sending.
@@ -343,7 +336,7 @@ public class AsyncLoggingWorker {
 
                             if (message != null) {
                                 this.leClient.write(Utils.formatMessage(message.replace("\n", LINE_SEP_REPLACER),
-                                        logHostName, useHttpPost));
+                                        logHostName, useHttpPost, printTraceId, printDeviceId, deviceId));
                                 message = null;
                             }
 
@@ -399,5 +392,7 @@ public class AsyncLoggingWorker {
         }
     }
 
-
+    public String getDeviceId() {
+        return deviceId;
+    }
 }
