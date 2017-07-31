@@ -78,6 +78,7 @@ public class LogStorage {
             while (logLine != null) {
                 try {
                     Matcher m = pattern.matcher(logLine);
+                    m.matches();
                     String priorityStr = m.group(1);
                     String tag = m.group(2);
                     String message = m.group(3);
@@ -85,6 +86,10 @@ public class LogStorage {
                     logs.offer(new AndroidLogger.LogItem(priorityStr, tag, message));
                 } catch (NumberFormatException ex) {
                     Log.e(TAG, "Unexpected number format exception", ex);
+                    throw ex;
+                } catch (IllegalStateException ex) {
+                    Log.e(TAG, "Unexpected IllegalStateException while parsing row: \"" + logLine + "\"", ex);
+                    throw ex;
                 }
 
                 logLine = bufReader.readLine();
