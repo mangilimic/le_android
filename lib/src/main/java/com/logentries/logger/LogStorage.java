@@ -34,7 +34,7 @@ public class LogStorage {
         storageFilePtr = create();
     }
 
-    public void putLogToStorage(AndroidLogger.LogItem logItem) throws IOException, RuntimeException {
+    public synchronized void putLogToStorage(AndroidLogger.LogItem logItem) throws IOException, RuntimeException {
         String tag = logItem.mTag == null ? "" : logItem.mTag;
         String message = logItem.mPriority + ";" + tag + ";" + logItem.mMessage;
 
@@ -64,7 +64,7 @@ public class LogStorage {
         }
     }
 
-    public Queue<AndroidLogger.LogItem> getAllLogsFromStorage(boolean needToRemoveStorageFile) {
+    public synchronized Queue<AndroidLogger.LogItem> getAllLogsFromStorage(boolean needToRemoveStorageFile) {
         Queue<AndroidLogger.LogItem> logs = new ArrayDeque<>();
         FileInputStream input = null;
 
@@ -117,13 +117,13 @@ public class LogStorage {
         return logs;
     }
 
-    public void removeStorageFile() throws IOException {
+    public synchronized void removeStorageFile() throws IOException {
         if (!storageFilePtr.delete()) {
             throw new IOException("Cannot delete " + STORAGE_FILE_NAME);
         }
     }
 
-    public void reCreateStorageFile() throws IOException {
+    public synchronized void reCreateStorageFile() throws IOException {
         Log.d(TAG, "Log storage has been re-created.");
         if (storageFilePtr == null) {
             storageFilePtr = create();
