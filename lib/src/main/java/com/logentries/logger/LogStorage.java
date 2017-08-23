@@ -20,7 +20,6 @@ public class LogStorage {
     private static final String TAG = "LogentriesAndroidLogger";
     private static final String STORAGE_FILE_NAME = "LogentriesLogStorage.log";
     private static final long MAX_QUEUE_FILE_SIZE = 10 * 1024 * 1024; // 10 MBytes.
-    static final String PRIORITY_SEPARATOR = ";";
 
     private Context context;
 
@@ -31,13 +30,13 @@ public class LogStorage {
 
     public LogStorage(Context context) throws IOException {
         this.context = context;
-        this.pattern = Pattern.compile("([0-9]+)" + PRIORITY_SEPARATOR + "([^;]*)" + PRIORITY_SEPARATOR + "(.*)");
+        this.pattern = Pattern.compile("([0-9]+);([^;]*);(.*)");
         storageFilePtr = create();
     }
 
     public void putLogToStorage(AndroidLogger.LogItem logItem) throws IOException, RuntimeException {
-        String tag = logItem.tag == null ? "" : logItem.tag;
-        String message = logItem.priority + PRIORITY_SEPARATOR + tag + PRIORITY_SEPARATOR + logItem.message;
+        String tag = logItem.mTag == null ? "" : logItem.mTag;
+        String message = logItem.mPriority + ";" + tag + ";" + logItem.mMessage;
 
         // Fix line endings for ingesting the log to the local storage.
         if (!message.endsWith("\n")) {
@@ -84,12 +83,14 @@ public class LogStorage {
                     String message = m.group(3);
 
                     logs.offer(new AndroidLogger.LogItem(priorityStr, tag, message));
-                } catch (NumberFormatException ex) {
-                    Log.e(TAG, "Unexpected number format exception", ex);
-                    throw ex;
-                } catch (IllegalStateException ex) {
-                    Log.e(TAG, "Unexpected IllegalStateException while parsing row: \"" + logLine + "\"", ex);
-                    throw ex;
+                } catch (Exception ex) {
+                    Log.e(TAG, "Unexpected exception", ex);
+
+                    try {
+                        logs.offer(new AndroidLogger.LogItem("ERROR", "LogStorageError", logLine));
+                    } catch (Exception ex2) {
+                        Log.e(TAG, "Unexpected exception while recovering logs", ex);
+                    }
                 }
 
                 logLine = bufReader.readLine();

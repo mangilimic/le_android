@@ -73,14 +73,16 @@ public class AndroidLogger {
 
     static class LogItem {
 
-        public final int priority;
-        public final String tag;
-        public final String message;
+        private static final String LINE_SEP_REPLACER = "\u2028";
+
+        public final int mPriority;
+        public final String mTag;
+        public final String mMessage;
 
         public LogItem(int priority, String tag, String message) {
-            this.priority = priority;
-            this.tag = tag;
-            this.message = message;
+            mPriority = priority;
+            mTag = tag.replace("\n", LINE_SEP_REPLACER).replace(";", "");
+            mMessage = message.replace("\n", LINE_SEP_REPLACER);
         }
 
         public LogItem(String priority, String tag, String message) throws NumberFormatException {

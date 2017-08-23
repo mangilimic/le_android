@@ -101,10 +101,6 @@ public class AsyncLoggingWorker {
             started = true;
         }
 
-        if (tag != null) {
-            tag = tag.replace(LogStorage.PRIORITY_SEPARATOR, "");
-        }
-
         if (line.length() > LOG_LENGTH_LIMIT) {
             for (String logChunk : Utils.splitStringToChunks(line, LOG_LENGTH_LIMIT)) {
                 tryOfferToQueue(priorityLevel, tag, logChunk);
@@ -176,7 +172,6 @@ public class AsyncLoggingWorker {
     private class SocketAppender extends Thread {
 
         // Formatting constants
-        private static final String LINE_SEP_REPLACER = "\u2028";
 
         private LogentriesClient leClient;
 
@@ -260,9 +255,9 @@ public class AsyncLoggingWorker {
                 logs = localStorage.getAllLogsFromStorage(false);
                 for (AndroidLogger.LogItem msg = logs.peek(); msg != null; msg = logs.peek()) {
                     if (sendRawLogMessage) {
-                        leClient.write(Utils.formatMessage(msg.tag, msg.message.replace("\n", LINE_SEP_REPLACER), msg.priority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
+                        leClient.write(Utils.formatMessage(msg.mTag, msg.mMessage, msg.mPriority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
                     } else {
-                        leClient.write(msg.message.replace("\n", LINE_SEP_REPLACER));
+                        leClient.write(msg.mMessage);
                     }
                     logs.poll(); // Remove the message after successful sending.
                 }
@@ -340,8 +335,8 @@ public class AsyncLoggingWorker {
                             }
 
                             if (logItem != null) {
-                                this.leClient.write(Utils.formatMessage(logItem.tag, logItem.message.replace("\n", LINE_SEP_REPLACER),
-                                        logItem.priority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
+                                this.leClient.write(Utils.formatMessage(logItem.mTag, logItem.mMessage,
+                                        logItem.mPriority, logHostName, useHttpPost, printTraceId, printDeviceId, deviceId, printPriority));
                                 logItem = null;
                             }
 
