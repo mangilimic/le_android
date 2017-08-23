@@ -87,7 +87,7 @@ public class LogStorage {
                     Log.e(TAG, "Unexpected exception", ex);
 
                     try {
-                        logs.offer(new AndroidLogger.LogItem("ERROR", "LogStorageError", logLine));
+                        logs.offer(new AndroidLogger.LogItem(Log.ERROR, "LogStorageError", logLine));
                     } catch (Exception ex2) {
                         Log.e(TAG, "Unexpected exception while recovering logs", ex);
                     }
